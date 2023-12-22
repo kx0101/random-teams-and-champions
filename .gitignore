@@ -1,0 +1,58 @@
+# Ignore Visual Studio files
+.vs/
+*.suo
+*.user
+*.sln.docstates
+
+# Ignore build output folders
+bin/
+obj/
+appsettings.json
+
+# Ignore NuGet packages
+*.nuget.props
+*.paket.props
+*.paket.targets
+packages/
+*.nupkg
+*.snupkg
+
+# Ignore user-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.ide
+
+# Ignore build-specific files
+*.mdb
+*.pdb
+
+# Ignore Resharper and Rider files
+_ReSharper*/
+*.resharper
+*.resharper.user
+*.sln.DotSettings.user
+
+# Ignore Visual Studio Code settings
+.vscode/
+
+# Ignore Rider settings
+.idea/
+
+# Ignore build results
+*.exe
+*.msi
+*.zip
+*.dll
+
+# Ignore Mac and Linux file system files
+.DS_Store
+Thumbs.db
+*.log
+*.sqlite
+
+# Ignore generated files
+*.Generated.cs
+
+# Ignore Roslyn analyzer ruleset files
+*.ruleset
