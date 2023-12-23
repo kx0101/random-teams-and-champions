@@ -1,21 +1,90 @@
 ﻿using System.Net.Http.Json;
+using System.Text;
 using Microsoft.Extensions.Configuration;
 
 class Program
 {
-    static readonly HttpClient client = new HttpClient();
 
-    static IConfigurationRoot configuration = new ConfigurationBuilder()
-        .SetBasePath(Directory.GetCurrentDirectory())
-        .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-        .Build();
+    static Dictionary<string, string> USER_IDS = new Dictionary<string, string>
+    {
+        {"Hix", "240412617133391882"},
+        {"Lolis", "227056359605141505"},
+        {"Liakos", "292586316691013633"},
+        {"Panos", "717650791623819344"},
+        {"Hurricane", "452151515906441218"}
+    };
+
+    static List<string> names = new List<string> { "Hix", "Panos", "Liakos", "Hurricane" };
+
+    static async Task<Dictionary<string, List<dynamic>>> GenerateTeams()
+    {
+        var teams = new Dictionary<string, List<dynamic>>();
+        var data = await GetChampions();
+
+        if (!data.ContainsKey("data"))
+        {
+            throw new Exception("api is broken");
+        }
+
+        var championData = data["data"];
+        var totalTeams = (int)Math.Ceiling((double)names.Count / 2);
+
+        var champions = new List<string>();
+
+        foreach (var champion in championData.EnumerateObject())
+        {
+            champions.Add(champion.Name);
+        }
+
+        for (int i = 0; i < totalTeams; i++)
+        {
+            var team = $"team{i + 1}";
+            teams[team] = new List<dynamic>();
+
+            for (int j = 0; j < 2 && names.Count > 0; j++)
+            {
+                var randomNameIndex = new Random().Next(0, names.Count);
+                var randomChampionIndex = new Random().Next(0, champions.Count);
+
+                var selectedName = names[randomNameIndex];
+                var selectedChampion = champions[randomChampionIndex];
+
+                names.RemoveAt(randomNameIndex);
+                champions.RemoveAt(randomChampionIndex);
+
+                teams[team].Add(new { name = selectedName, champion = selectedChampion });
+            }
+        }
+
+        if (names.Count > 0)
+        {
+            var team = $"team{teams.Count + 1}";
+            teams[team] = new List<dynamic> { new { name = names[0], champion = champions[0] } };
+        }
+
+        Console.WriteLine("Teams:\n");
+        foreach (var team in teams)
+        {
+            Console.WriteLine($"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}");
+        }
+
+        var discordMessage = $"{usersToPing} \n Teams:\n";
+        foreach (var team in teams)
+        {
+            discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
+        }
+
+        await SendMessageToDiscord(discordMessage);
+
+        return teams;
+    }
 
     static async Task Main(string[] args)
     {
         var teams = await GenerateTeams();
 
         Console.WriteLine("Enter banned champions (comma-separated) or press Enter to skip: ");
-        string bannedChampionsInput = Console.ReadLine();
+        string? bannedChampionsInput = Console.ReadLine();
 
         if (string.IsNullOrEmpty(bannedChampionsInput))
         {
@@ -61,7 +130,7 @@ class Program
                 }
             }
 
-            var discordMessage = "\nUpdated Teams:\n";
+            var discordMessage = $"{usersToPing} \nUpdated Teams:\n";
             foreach (var team in updatedTeams)
             {
                 discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
@@ -82,88 +151,6 @@ class Program
         }
     }
 
-    static async Task<Dictionary<string, dynamic>> GetChampions()
-    {
-        try
-        {
-            HttpResponseMessage response = await client.GetAsync("https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/champion.json");
-            response.EnsureSuccessStatusCode();
-
-            var data = await response.Content.ReadFromJsonAsync<Dictionary<string, dynamic>>();
-
-            if (data == null)
-            {
-                throw new Exception("api is broken");
-            }
-
-            return data;
-
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e.Message);
-            return null;
-        }
-    }
-
-    static async Task<Dictionary<string, List<dynamic>>> GenerateTeams()
-    {
-        var teams = new Dictionary<string, List<dynamic>>();
-        var data = await GetChampions();
-        var championData = data["data"];
-
-        var names = new List<string> { "Hix", "Panos", "Liakos", "Hurricane" };
-        var totalTeams = (int)Math.Ceiling((double)names.Count / 2);
-
-        var champions = new List<string>();
-
-        foreach (var champion in championData.EnumerateObject())
-        {
-            champions.Add(champion.Name);
-        }
-
-        for (int i = 0; i < totalTeams; i++)
-        {
-            var team = $"team{i + 1}";
-            teams[team] = new List<dynamic>();
-
-            for (int j = 0; j < 2 && names.Count > 0; j++)
-            {
-                var randomNameIndex = new Random().Next(0, names.Count);
-                var randomChampionIndex = new Random().Next(0, champions.Count);
-
-                var selectedName = names[randomNameIndex];
-                var selectedChampion = champions[randomChampionIndex];
-
-                names.RemoveAt(randomNameIndex);
-                champions.RemoveAt(randomChampionIndex);
-
-                teams[team].Add(new { name = selectedName, champion = selectedChampion });
-            }
-        }
-
-        if (names.Count > 0)
-        {
-            var team = $"team{teams.Count + 1}";
-            teams[team] = new List<dynamic> { new { name = names[0], champion = champions[0] } };
-        }
-
-        Console.WriteLine("Teams:\n");
-        foreach (var team in teams)
-        {
-            Console.WriteLine($"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}");
-        }
-
-        var discordMessage = "Teams:\n";
-        foreach (var team in teams)
-        {
-            discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
-        }
-
-        await SendMessageToDiscord(discordMessage);
-
-        return teams;
-    }
 
     static async Task SendMessageToDiscord(string messageContent)
     {
@@ -194,5 +181,56 @@ class Program
             Console.WriteLine(e.Message);
         }
     }
-}
 
+    static string GetIds(List<string> names)
+    {
+        var usersToPing = new StringBuilder();
+
+        foreach (var entry in USER_IDS)
+        {
+            var name = entry.Key;
+            var id = entry.Value;
+
+            if (names.Contains(name))
+            {
+                usersToPing.Append($"<@{id}> ");
+            }
+        }
+
+        return usersToPing.ToString();
+    }
+
+    static readonly HttpClient client = new HttpClient();
+
+    static IConfigurationRoot configuration = new ConfigurationBuilder()
+        .SetBasePath(Directory.GetCurrentDirectory())
+        .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+        .Build();
+
+    static string usersToPing = GetIds(names);
+
+    static async Task<Dictionary<string, dynamic>> GetChampions()
+    {
+        try
+        {
+            HttpResponseMessage response = await client.GetAsync("https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/champion.json");
+            response.EnsureSuccessStatusCode();
+
+            var data = await response.Content.ReadFromJsonAsync<Dictionary<string, dynamic>>();
+
+            if (data == null)
+            {
+                throw new Exception("api is broken");
+            }
+
+            return data;
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+            return new Dictionary<string, dynamic>();
+        }
+    }
+
+}
