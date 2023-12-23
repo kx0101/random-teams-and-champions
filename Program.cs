@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 
 class Program
 {
-
     static Dictionary<string, string> USER_IDS = new Dictionary<string, string>
     {
         {"Hix", "240412617133391882"},
@@ -43,8 +42,8 @@ class Program
 
             for (int j = 0; j < 2 && names.Count > 0; j++)
             {
-                var randomNameIndex = new Random().Next(0, names.Count);
-                var randomChampionIndex = new Random().Next(0, champions.Count);
+                var randomNameIndex = random.Next(0, names.Count);
+                var randomChampionIndex = random.Next(0, champions.Count);
 
                 var selectedName = names[randomNameIndex];
                 var selectedChampion = champions[randomChampionIndex];
@@ -118,7 +117,7 @@ class Program
                         }
 
 
-                        var randomChampionIndex = new Random().Next(0, champions.Count);
+                        var randomChampionIndex = random.Next(0, champions.Count);
                         var randomChampion = champions[randomChampionIndex];
 
                         updatedTeams[team.Key].Add(new { name = player.name, champion = randomChampion });
@@ -143,7 +142,6 @@ class Program
             {
                 Console.WriteLine($"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n");
             }
-
         }
         else
         {
@@ -162,8 +160,6 @@ class Program
             {
                 throw new Exception("No webhook");
             }
-
-            var httpClient = new HttpClient();
 
             var payload = new
             {
@@ -200,7 +196,8 @@ class Program
         return usersToPing.ToString();
     }
 
-    static readonly HttpClient client = new HttpClient();
+    static readonly HttpClient httpClient = new HttpClient();
+    static readonly Random random = new Random();
 
     static IConfigurationRoot configuration = new ConfigurationBuilder()
         .SetBasePath(Directory.GetCurrentDirectory())
@@ -209,11 +206,18 @@ class Program
 
     static string usersToPing = GetIds(names);
 
-    static async Task<Dictionary<string, dynamic>> GetChampions()
+    static Dictionary<string, dynamic>? cachedChampionData;
+
+    static async Task<Dictionary<string, dynamic>> GetChampions(bool useCache = true)
     {
         try
         {
-            HttpResponseMessage response = await client.GetAsync("https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/champion.json");
+            if (useCache && cachedChampionData != null)
+            {
+                return cachedChampionData;
+            }
+
+            HttpResponseMessage response = await httpClient.GetAsync("https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/champion.json");
             response.EnsureSuccessStatusCode();
 
             var data = await response.Content.ReadFromJsonAsync<Dictionary<string, dynamic>>();
@@ -223,8 +227,9 @@ class Program
                 throw new Exception("api is broken");
             }
 
-            return data;
+            cachedChampionData = data;
 
+            return data;
         }
         catch (Exception e)
         {
@@ -232,5 +237,4 @@ class Program
             return new Dictionary<string, dynamic>();
         }
     }
-
 }
