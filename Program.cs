@@ -15,6 +15,35 @@ class Program
 
     static List<string> names = new List<string> { "Hix", "Panos", "Liakos", "Hurricane" };
 
+    static async Task Main(string[] args)
+    {
+        var teams = await GenerateTeams();
+
+        Console.WriteLine("Enter banned champions (comma-separated) or press Enter to skip: ");
+        string? bannedChampionsInput = Console.ReadLine();
+
+        if (string.IsNullOrEmpty(bannedChampionsInput))
+        {
+            return;
+        }
+
+        var bannedChampions = bannedChampionsInput.Split(',').Select(champion => champion.Trim()).ToList();
+        var bannedChampionsString = "\nBanned Champions: " + string.Join(", ", bannedChampions);
+
+        await SendMessageToDiscord(bannedChampionsString);
+
+        if (bannedChampions.Any())
+        {
+            var updatedTeams = await UpdateTeams(teams, bannedChampions);
+
+            await DisplayTeamsOnDiscord(updatedTeams, true);
+        }
+        else
+        {
+            Console.WriteLine("\nNo banned champions, teams remain unchanged.");
+        }
+    }
+
     static async Task<Dictionary<string, List<dynamic>>> GenerateTeams()
     {
         var teams = new Dictionary<string, List<dynamic>>();
@@ -61,120 +90,38 @@ class Program
             teams[team] = new List<dynamic> { new { name = names[0], champion = champions[0] } };
         }
 
-        Console.WriteLine("Teams:\n");
-        foreach (var team in teams)
-        {
-            Console.WriteLine($"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}");
-        }
-
-        var discordMessage = $"{usersToPing} \n Teams:\n";
-        foreach (var team in teams)
-        {
-            discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
-        }
-
-        await SendMessageToDiscord(discordMessage);
+        await DisplayTeamsOnDiscord(teams);
 
         return teams;
     }
 
-    static async Task Main(string[] args)
-    {
-        var teams = await GenerateTeams();
-
-        Console.WriteLine("Enter banned champions (comma-separated) or press Enter to skip: ");
-        string? bannedChampionsInput = Console.ReadLine();
-
-        if (string.IsNullOrEmpty(bannedChampionsInput))
-        {
-            return;
-        }
-
-        var bannedChampions = bannedChampionsInput.Split(',').Select(champion => champion.Trim()).ToList();
-        var bannedChampionsString = "\nBanned Champions: " + string.Join(", ", bannedChampions);
-
-        await SendMessageToDiscord(bannedChampionsString);
-
-        if (bannedChampions.Any())
-        {
-            var updatedTeams = new Dictionary<string, List<dynamic>>();
-
-            foreach (var team in teams)
-            {
-                updatedTeams[team.Key] = new List<dynamic>();
-
-                foreach (var player in team.Value)
-                {
-                    if (bannedChampions.Contains(player.champion))
-                    {
-                        var data = await GetChampions();
-                        var championsData = data["data"];
-                        var champions = new List<string>();
-
-                        foreach (var champion in championsData.EnumerateObject())
-                        {
-                            champions.Add(champion.Name);
-                        }
-
-
-                        var randomChampionIndex = random.Next(0, champions.Count);
-                        var randomChampion = champions[randomChampionIndex];
-
-                        updatedTeams[team.Key].Add(new { name = player.name, champion = randomChampion });
-                    }
-                    else
-                    {
-                        updatedTeams[team.Key].Add(player);
-                    }
-                }
-            }
-
-            var discordMessage = $"{usersToPing} \nUpdated Teams:\n";
-            foreach (var team in updatedTeams)
-            {
-                discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
-            }
-
-            await SendMessageToDiscord(discordMessage);
-
-            Console.WriteLine("\nUpdated Teams:\n");
-            foreach (var team in updatedTeams)
-            {
-                Console.WriteLine($"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n");
-            }
-        }
-        else
-        {
-            Console.WriteLine("\nNo banned champions, teams remain unchanged.");
-        }
-    }
-
-
     static async Task SendMessageToDiscord(string messageContent)
     {
-        try
         {
-            string discordWebhookUrl = configuration.GetSection("AppSettings")["DISCORD_WEBHOOK_URL"];
-
-            if (string.IsNullOrWhiteSpace(discordWebhookUrl))
+            try
             {
-                throw new Exception("No webhook");
+                string discordWebhookUrl = configuration.GetSection("AppSettings")["DISCORD_WEBHOOK_URL"];
+
+                if (string.IsNullOrWhiteSpace(discordWebhookUrl))
+                {
+                    throw new Exception("No webhook");
+                }
+
+                var payload = new
+                {
+                    content = messageContent
+                };
+
+                var stringPayload = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
+                var httpContent = new StringContent(stringPayload, System.Text.Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await httpClient.PostAsync(discordWebhookUrl, httpContent);
+                response.EnsureSuccessStatusCode();
             }
-
-            var payload = new
+            catch (Exception e)
             {
-                content = messageContent
-            };
-
-            var stringPayload = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
-            var httpContent = new StringContent(stringPayload, System.Text.Encoding.UTF8, "application/json");
-
-            HttpResponseMessage response = await httpClient.PostAsync(discordWebhookUrl, httpContent);
-            response.EnsureSuccessStatusCode();
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e.Message);
+                Console.WriteLine(e.Message);
+            }
         }
     }
 
@@ -196,15 +143,53 @@ class Program
         return usersToPing.ToString();
     }
 
-    static readonly HttpClient httpClient = new HttpClient();
-    static readonly Random random = new Random();
+    static async Task<Dictionary<string, List<dynamic>>> UpdateTeams(Dictionary<string, List<dynamic>> teams, List<string> bannedChampions)
+    {
+        var updatedTeams = new Dictionary<string, List<dynamic>>();
 
-    static IConfigurationRoot configuration = new ConfigurationBuilder()
-        .SetBasePath(Directory.GetCurrentDirectory())
-        .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-        .Build();
+        foreach (var team in teams)
+        {
+            updatedTeams[team.Key] = new List<dynamic>();
 
-    static string usersToPing = GetIds(names);
+            foreach (var player in team.Value)
+            {
+                if (bannedChampions.Contains(player.champion))
+                {
+                    var data = await GetChampions();
+                    var championsData = data["data"];
+                    var champions = new List<string>();
+
+                    foreach (var champion in championsData.EnumerateObject())
+                    {
+                        champions.Add(champion.Name);
+                    }
+
+                    var randomChampionIndex = random.Next(0, champions.Count);
+                    var randomChampion = champions[randomChampionIndex];
+
+                    updatedTeams[team.Key].Add(new { name = player.name, champion = randomChampion });
+                }
+                else
+                {
+                    updatedTeams[team.Key].Add(player);
+                }
+            }
+        }
+
+        return updatedTeams;
+    }
+
+    static async Task DisplayTeamsOnDiscord(Dictionary<string, List<dynamic>> teams, bool isUpdated = false)
+    {
+        var discordMessage = $"{usersToPing} \n {(isUpdated ? "Updated" : "")} Teams:\n";
+        foreach (var team in teams)
+        {
+            discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
+        }
+
+        await SendMessageToDiscord(discordMessage);
+
+    }
 
     static Dictionary<string, dynamic>? cachedChampionData;
 
@@ -237,4 +222,16 @@ class Program
             return new Dictionary<string, dynamic>();
         }
     }
+
+    static HttpClient httpClient = new HttpClient();
+
+    static Random random = new Random();
+
+    static string usersToPing = GetIds(names);
+
+    static IConfigurationRoot configuration = new ConfigurationBuilder()
+        .SetBasePath(Directory.GetCurrentDirectory())
+        .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+        .Build();
+
 }
