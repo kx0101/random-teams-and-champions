@@ -181,7 +181,7 @@ class Program
 
     static async Task DisplayTeamsOnDiscord(Dictionary<string, List<dynamic>> teams, bool isUpdated = false)
     {
-        var discordMessage = $"{usersToPing} \n {(isUpdated ? "Updated" : "")} Teams:\n";
+        var discordMessage = $"{usersToPing} \n {(isUpdated ? "Updated" : "")}Teams:\n";
         foreach (var team in teams)
         {
             discordMessage += $"{team.Key}: {string.Join(", ", team.Value.Select(player => $"{player.name} ({player.champion})"))}\n";
