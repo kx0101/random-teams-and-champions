@@ -10,10 +10,11 @@ class Program
         {"Lolis", "227056359605141505"},
         {"Liakos", "292586316691013633"},
         {"Panos", "717650791623819344"},
-        {"Hurricane", "452151515906441218"}
+        {"Hurricane", "452151515906441218"},
+        {"Aggelos", "322359860685570048"}
     };
 
-    static List<string> names = new List<string> { "Hix", "Panos", "Liakos", "Hurricane" };
+    static List<string> names = new List<string> { "Hix", "Liakos", "Lolis" };
 
     static async Task Main(string[] args)
     {
